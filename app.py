@@ -7,6 +7,7 @@ app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Simulating user carts stored in memory
+# This will now store carts for multiple users, each user has their own cart (which is a dictionary of products)
 cart = {}
 
 # Use the environment variable for Product Service URL
@@ -15,7 +16,7 @@ PRODUCT_SERVICE_URL = os.getenv('PRODUCT_SERVICE_URL', 'http://localhost:5000/pr
 # Endpoint to get the cart for a specific user
 @app.route('/cart/<user_id>', methods=['GET'])
 def get_cart(user_id):
-    return jsonify(cart.get(user_id, {}))
+    return jsonify(cart.get(user_id, {}))  # Returns the user's cart, or an empty dict if the user has no cart
 
 # Endpoint to add a product to the cart for a specific user
 @app.route('/cart/<user_id>/add/<int:product_id>', methods=['POST'])
@@ -31,11 +32,15 @@ def add_to_cart(user_id, product_id):
 
     product = product_response.json()
 
-    # Initialize cart for the user if not present
-    cart.setdefault(user_id, {})
+    # Initialize the user's cart if it doesn't exist
+    if user_id not in cart:
+        cart[user_id] = {}
 
     # Add product to cart or update the quantity
-    cart[user_id][product['name']] = cart[user_id].get(product['name'], 0) + quantity
+    if product['name'] in cart[user_id]:
+        cart[user_id][product['name']]['quantity'] += quantity
+    else:
+        cart[user_id][product['name']] = {'price': product['price'], 'quantity': quantity}
 
     return jsonify(cart[user_id]), 201
 
@@ -54,16 +59,15 @@ def remove_from_cart(user_id, product_id):
     product = product_response.json()
 
     # Initialize cart for the user if not present
-    cart.setdefault(user_id, {})
+    if user_id not in cart or product['name'] not in cart[user_id]:
+        return jsonify({'message': 'Product not in cart'}), 404
 
-    # Check if the product exists in the user's cart
-    if product['name'] in cart[user_id]:
-        # Reduce the quantity or remove the product if the quantity goes to zero or below
-        cart[user_id][product['name']] -= quantity
-        if cart[user_id][product['name']] <= 0:
-            del cart[user_id][product['name']]
+    # Reduce the quantity or remove the product if the quantity goes to zero or below
+    cart[user_id][product['name']]['quantity'] -= quantity
+    if cart[user_id][product['name']]['quantity'] <= 0:
+        del cart[user_id][product['name']]
 
     return jsonify(cart[user_id]), 200
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)
