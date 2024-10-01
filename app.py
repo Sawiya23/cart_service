@@ -4,39 +4,37 @@ import os
 from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app)
 
-# Simulating user carts stored in memory
-# This will now store carts for multiple users, each user has their own cart (which is a dictionary of products)
+# Simulated in-memory cart storage for users
 cart = {}
 
-# Use the environment variable for Product Service URL
+# Fetch the Product Service URL from environment variables
 PRODUCT_SERVICE_URL = os.getenv('PRODUCT_SERVICE_URL', 'http://localhost:5000/products')
 
-# Endpoint to get the cart for a specific user
+# Get the cart for a specific user
 @app.route('/cart/<user_id>', methods=['GET'])
 def get_cart(user_id):
-    return jsonify(cart.get(user_id, {}))  # Returns the user's cart, or an empty dict if the user has no cart
+    user_cart = cart.get(user_id)
+    if not user_cart:
+        return jsonify({'message': 'Cart is empty'}), 200
+    return jsonify(user_cart)
 
-# Endpoint to add a product to the cart for a specific user
+# Add a product to the cart for a specific user
 @app.route('/cart/<user_id>/add/<int:product_id>', methods=['POST'])
 def add_to_cart(user_id, product_id):
-    # Get the quantity from the request body, default is 1 if not provided
     quantity = request.json.get('quantity', 1)
-
-    # Fetch product details from Product Service
-    product_response = requests.get(f"{PRODUCT_SERVICE_URL}/{product_id}")
-
-    if product_response.status_code != 200:
-        return jsonify({'message': 'Product not found'}), 404
+    try:
+        product_response = requests.get(f"{PRODUCT_SERVICE_URL}/{product_id}")
+        product_response.raise_for_status()  # Handle non-200 responses
+    except requests.exceptions.RequestException as e:
+        return jsonify({'message': 'Error fetching product', 'error': str(e)}), 500
 
     product = product_response.json()
 
-    # Initialize the user's cart if it doesn't exist
     if user_id not in cart:
         cart[user_id] = {}
 
-    # Add product to cart or update the quantity
     if product['name'] in cart[user_id]:
         cart[user_id][product['name']]['quantity'] += quantity
     else:
@@ -44,25 +42,21 @@ def add_to_cart(user_id, product_id):
 
     return jsonify(cart[user_id]), 201
 
-# Endpoint to remove a product from the cart for a specific user
+# Remove a product from the cart for a specific user
 @app.route('/cart/<user_id>/remove/<int:product_id>', methods=['POST'])
 def remove_from_cart(user_id, product_id):
-    # Get the quantity from the request body, default is 1 if not provided
     quantity = request.json.get('quantity', 1)
-
-    # Fetch product details from Product Service
-    product_response = requests.get(f"{PRODUCT_SERVICE_URL}/{product_id}")
-
-    if product_response.status_code != 200:
-        return jsonify({'message': 'Product not found'}), 404
+    try:
+        product_response = requests.get(f"{PRODUCT_SERVICE_URL}/{product_id}")
+        product_response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        return jsonify({'message': 'Error fetching product', 'error': str(e)}), 500
 
     product = product_response.json()
 
-    # Initialize cart for the user if not present
     if user_id not in cart or product['name'] not in cart[user_id]:
         return jsonify({'message': 'Product not in cart'}), 404
 
-    # Reduce the quantity or remove the product if the quantity goes to zero or below
     cart[user_id][product['name']]['quantity'] -= quantity
     if cart[user_id][product['name']]['quantity'] <= 0:
         del cart[user_id][product['name']]
