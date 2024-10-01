@@ -1,8 +1,10 @@
 from flask import Flask, jsonify, request
 import requests
 import os
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # Simulating user carts stored in memory
 cart = {}
